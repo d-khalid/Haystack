@@ -1,10 +1,34 @@
+#include <fstream>
 #include <iostream>
 #include <bits/ostream.tcc>
 
 #include "lexicon.hpp"
+#include "nlohmann/json.hpp"
+#include "gtest/gtest.h"
+
+using json = nlohmann::json;
+
+// gtest works!
+TEST(FactorialTest, HandlesZeroInput) {
+    EXPECT_EQ(1, 2);
+}
 
 // Test program
 int main() {
+    // if (1) {
+    //     RUN_ALL_TESTS();
+    //     return 0;
+    // }
+
+    // nlohmann.json also works!
+    // std::ifstream f("/home/alkalinelemon/Downloads/sindhi.json");
+    // json data = json::parse(f);
+    //
+    // std::cout << data.dump() << std::endl;
+
+
+    return 0;
+
     Lexicon lexicon;
 
     // Sample text
