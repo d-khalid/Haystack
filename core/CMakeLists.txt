@@ -17,5 +17,6 @@ target_include_directories(haystack_core
 target_link_libraries(haystack_core PUBLIC pugixml)
 target_link_libraries(haystack_core PUBLIC nlohmann_json::nlohmann_json)
 target_link_libraries(haystack_core PUBLIC GTest::gtest)
+target_link_libraries(haystack_core PUBLIC CLI11::CLI11)
 
 

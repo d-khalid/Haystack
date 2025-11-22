@@ -15,6 +15,12 @@ Lexicon::Lexicon() {
 }
 
 uint64_t Lexicon::add_word(std::string word) {
+
+    // Check if exists before adding
+    if (word_to_id.count(word) > 0) {
+        return word_to_id[word];
+    }
+
     // Create hashmap entry and vector entry
     id_to_word.emplace_back(word);
     word_to_id.emplace(word, next_id);
