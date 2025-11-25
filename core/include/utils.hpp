@@ -1,0 +1,41 @@
+#ifndef UTILS_H
+#define UTILS_H
+#include <cstdint>
+#include <iostream>
+#include <string>
+#include <vector>
+
+#include "compound_key.hpp"
+#include "data_index.hpp"
+#include "post.hpp"
+#include "comment.hpp"
+#include "lexicon.hpp"
+#include "html_parser.hpp"
+
+
+// A class with helpful static functions
+class Utils {
+public:
+    static std::vector<std::string> parse_tags(const std::string& tags_str);
+
+    static std::string extract_text_from_html(const std::string& html);
+
+
+    // Parse Posts.xml into Post objects with configurable limit
+    static std::vector<Post> parse_posts_from_xml(const std::string& xml_file_path,
+                                          SiteID site_id,
+                                          size_t limit = SIZE_MAX);
+
+    // Parse Comments.xml into Commment objects with configurable limit
+    static std::vector<Comment> parse_comments_from_xml(const std::string& xml_file_path,
+                                           SiteID site_id,
+                                           size_t limit = SIZE_MAX);
+
+    // Write comments and posts into data index as JSON
+    static void generate_data_index(ISAMStorage& data_index, const std::string& post_file, const std::string& comment_file);
+
+    // Create the lexicon from the data index
+    static Lexicon generate_lexicon(ISAMStorage& data_index);
+
+};
+#endif //UTILS_H

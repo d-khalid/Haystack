@@ -14,7 +14,7 @@ Lexicon::Lexicon() {
     next_id = 1;
 }
 
-uint64_t Lexicon::add_word(std::string word) {
+uint32_t Lexicon::add_word(std::string word) {
 
     // Check if exists before adding
     if (word_to_id.count(word) > 0) {
@@ -28,6 +28,18 @@ uint64_t Lexicon::add_word(std::string word) {
     return next_id++;
 }
 
+uint32_t Lexicon::size() {
+    return id_to_word.size();
+}
+
+
+void Lexicon::add_words(std::vector<std::string> words) {
+    for (const auto& word : words) {
+        add_word(word);
+    }
+}
+
+
 std::string Lexicon::get_word(int word_id) {
     // Vector bounds check
     if (word_id < 1 || word_id >= id_to_word.size()) {
@@ -36,7 +48,7 @@ std::string Lexicon::get_word(int word_id) {
     return id_to_word[word_id];
 }
 
-uint64_t Lexicon::get_word_id(std::string word) {
+uint32_t Lexicon::get_word_id(std::string word) {
     return word_to_id.count(word) == 0 ? 0 : word_to_id[word];
 }
 
@@ -45,9 +57,9 @@ bool Lexicon::save(std::string file_path) {
     std::fstream lex_file(file_path, std::ios::app | std::ios::in); // In Append+Input mode
 
 
-    // Write words seperated by spaces
+    // Write words seperated by new lines
     for (int i = 1; i < id_to_word.size() - 1; i++) {
-        lex_file << id_to_word[i] << " ";
+        lex_file << id_to_word[i] << "\n";
     }
     if (id_to_word.size() > 1) {
         lex_file << id_to_word.back();
@@ -76,6 +88,7 @@ bool Lexicon::load(std::string file_path) {
     }
 
     lex_file.close();
+    return true;
 }
 
 std::vector<std::string> Lexicon::tokenize_text(std::string text, char delim) {
@@ -84,7 +97,6 @@ std::vector<std::string> Lexicon::tokenize_text(std::string text, char delim) {
 
     // Trim before parsing
     text = trim(text);
-
     for (int i = 0; i < text.size(); i++) {
         if (text[i] == delim) {
             tokens.push_back(normalize_token(

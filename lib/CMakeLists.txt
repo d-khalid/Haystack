@@ -24,20 +24,10 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(json)
 
-# CLI11
-FetchContent_Declare(
-        cli11_proj
-        QUIET
-        GIT_REPOSITORY https://github.com/CLIUtils/CLI11.git
-        GIT_TAG v2.3.2
-        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-)
 
-FetchContent_MakeAvailable(cli11_proj)
-
-
-target_include_directories(pugixml
-        PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/pugixml
+target_include_directories(
+        pugixml PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/pugixml
+        cli PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/CLI11
         html_parser PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/html_parser
 )
 
