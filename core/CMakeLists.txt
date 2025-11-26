@@ -2,7 +2,7 @@
 
 add_library(haystack_core
         src/lexicon.cpp
-        src/data_index.cpp
+        src/isam_storage.cpp
         src/compound_key.cpp
         src/utils.cpp
 )

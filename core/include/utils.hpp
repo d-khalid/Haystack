@@ -6,16 +6,22 @@
 #include <vector>
 
 #include "compound_key.hpp"
-#include "data_index.hpp"
+#include "isam_storage.hpp"
 #include "post.hpp"
 #include "comment.hpp"
 #include "lexicon.hpp"
-#include "html_parser.hpp"
 
 
-// A class with helpful static functions
+// A class with helpful static functions, and functions to generate the needed files
 class Utils {
 public:
+    // Write comments and posts into data index as JSON
+    static void generate_data_index(ISAMStorage& data_index, const std::string& post_file, const std::string& comment_file);
+
+    // Create the lexicon from the data index
+    static Lexicon generate_lexicon(ISAMStorage& data_index);
+
+
     static std::vector<std::string> parse_tags(const std::string& tags_str);
 
     static std::string extract_text_from_html(const std::string& html);
@@ -31,11 +37,6 @@ public:
                                            SiteID site_id,
                                            size_t limit = SIZE_MAX);
 
-    // Write comments and posts into data index as JSON
-    static void generate_data_index(ISAMStorage& data_index, const std::string& post_file, const std::string& comment_file);
-
-    // Create the lexicon from the data index
-    static Lexicon generate_lexicon(ISAMStorage& data_index);
 
 };
 #endif //UTILS_H

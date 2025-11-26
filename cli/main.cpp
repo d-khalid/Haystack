@@ -1,26 +1,25 @@
 #include<iostream>
 #include <pstl/parallel_backend_utils.h>
-
 #include "CLI11.hpp"
 #include "compound_key.hpp"
-#include "data_index.hpp"
+#include "isam_storage.hpp"
 #include "pugixml.hpp"
 #include "utils.hpp"
 
 
 int main(int argc, char** argv) {
 
-    // Testing!
-    CLI::App app{"App description"};
+    CLI::App app{"The Haystack CLI"};
     argv = app.ensure_utf8(argv);
 
 
     bool generate_data_index = false;
-    app.add_flag("--generate-data-index",
+    bool generate_lexicon = false;
+
+    app.add_flag("--data-gen",
                  generate_data_index,
                  "Generate the ISAM-style data index");
-    bool generate_lexicon = false;
-    app.add_flag("--generate-lexicon",
+    app.add_flag("--lexicon-gen",
                  generate_lexicon,
                  "Generate the lexicon using the data index");
 
@@ -30,7 +29,9 @@ int main(int argc, char** argv) {
     std::string index_file;
     std::string data_file;
     std::string posts_file, comments_file, lexicon_save_file;
+    std::string data_folder;
     if (generate_data_index) {
+
         std::cout << "Enter path to index file: ";
         std::cin >> index_file;
 
@@ -65,25 +66,16 @@ int main(int argc, char** argv) {
         l.save(lexicon_save_file);
     }
     else{
-        std::cout << Utils::extract_text_from_html("<p>i am already aware that bad do suppress this message?</p>  power-management notification <p>maybe <a href=\"http://linux.aldeby.org/get-rid-of-your-battery-may-be-broken-notification.htmlz\">these</a> instructions will help you rid of message.</p>");
-        // std::cout << "Enter path to index file: ";
-        // std::cin >> index_file;
-        //
-        // std::cout << "Enter path to data file: ";
-        // std::cin >> data_file;
-        //
-        // ISAMStorage store(index_file, data_file);
-        //
-        //
-        // auto p = store.read(CompoundKey::unpack(0x100010000000500));
-        // if (!p.has_value()) {
-        //     std::cout << "Value not found" << std::endl;
-        //     return -1;
-        // }
-        //
-        // std::cout << (*p).first.to_string() << std::endl;;
-        //
-        // std::cout << "DATA: " << (*p).second;
+        std::cout << "Enter path to index file: ";
+        std::cin >> index_file;
+
+        std::cout << "Enter path to data file: ";
+        std::cin >> data_file;
+
+        ISAMStorage data_index(index_file, data_file);
+
+        std::cout << "Entries in Data Index: " << data_index.size() << std::endl;
+
 
     }
     return 0;

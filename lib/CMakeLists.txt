@@ -28,7 +28,6 @@ FetchContent_MakeAvailable(json)
 target_include_directories(
         pugixml PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/pugixml
         cli PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/CLI11
-        html_parser PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/html_parser
 )
 
 

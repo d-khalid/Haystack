@@ -1,6 +1,7 @@
 
 #include "utils.hpp"
 #include <iostream>
+#include <regex>
 #include <sstream>
 #include "pugixml.hpp"
 
@@ -29,32 +30,24 @@ std::vector<std::string> Utils::parse_tags(const std::string& tags_str) {
 }
 
 std::string Utils::extract_text_from_html(const std::string& html) {
-
-
-    auto wrapped_html = "<html><body><div>" + html + "</div></body></html>";
-    HtmlParser parser;
-    shared_ptr<HtmlDocument> doc = parser.Parse(wrapped_html.c_str(), wrapped_html.size());
-
-    if (!doc) {
+    if (html.empty()) {
         return "";
     }
 
-    // Use XPath to select all text nodes
-    std::vector<shared_ptr<HtmlElement>> text_nodes = doc->SelectElement("//");
+    std::string result = html;
 
-    std::string result;
-    for (const auto& node : text_nodes) {
-        std::string text = node->GetValue();
-        if (!text.empty()) {
-            // Clean up whitespace and concatenate
-            result += text + " ";
-        }
-    }
+    // Remove all HTML tags
+    result = std::regex_replace(result, std::regex("<[^>]*>"), "");
 
-    // Remove extra whitespace
-    if (!result.empty()) {
-        result.erase(result.find_last_not_of(" \n\r\t") + 1);
-    }
+    // Decode basic entities
+    result = std::regex_replace(result, std::regex("&amp;"), "&");
+    result = std::regex_replace(result, std::regex("&lt;"), "<");
+    result = std::regex_replace(result, std::regex("&gt;"), ">");
+    result = std::regex_replace(result, std::regex("&nbsp;"), " ");
+
+    // Normalize whitespace
+    result = std::regex_replace(result, std::regex("\\s+"), " ");
+    result = std::regex_replace(result, std::regex("^ | $"), "");
 
     return result;
 }
@@ -107,11 +100,8 @@ std::vector<Post> Utils::parse_posts_from_xml(const std::string& xml_file_path,
         if (auto body_attr = row.attribute("Body")) {
             post.body = body_attr.as_string();
 
-            // Use html_parser to get the clean text output.
-            HtmlParser parser;
-            shared_ptr<HtmlDocument> doc = parser.Parse(post.body.c_str(), post.body.size());
-
-            post.cleaned_body = doc->text();
+            // Keep a clean version as well as the original
+            post.cleaned_body = Utils::extract_text_from_html(post.body);
         }
 
         if (auto tags_attr = row.attribute("Tags")) {
@@ -238,7 +228,7 @@ void Utils::generate_data_index(ISAMStorage& data_index, const std::string& post
     auto posts = parse_posts_from_xml(post_file, SiteID::ASK_UBUNTU);
 
     // Generate entries
-    std::vector<std::pair<CompoundKey, std::string>> p_entries;
+    std::vector<std::pair<uint64_t, std::string>> p_entries;
     p_entries.reserve(posts.size());
 
 
@@ -251,7 +241,7 @@ void Utils::generate_data_index(ISAMStorage& data_index, const std::string& post
 
         nlohmann::json j = Post::to_json(post);
 
-        p_entries.emplace_back(k, j.dump(4));
+        p_entries.emplace_back(k.pack(), j.dump(4));
     }
 
     std::cout << "Writing post data...." << std::endl;
@@ -262,7 +252,7 @@ void Utils::generate_data_index(ISAMStorage& data_index, const std::string& post
     auto comments = parse_comments_from_xml(comments_file, SiteID::ASK_UBUNTU);
 
     // Generate entries
-    std::vector<std::pair<CompoundKey, std::string>> c_entries;
+    std::vector<std::pair<uint64_t, std::string>> c_entries;
     c_entries.reserve(comments.size());
 
 
@@ -275,7 +265,7 @@ void Utils::generate_data_index(ISAMStorage& data_index, const std::string& post
 
         nlohmann::json j = Comment::to_json(comment);
 
-        c_entries.emplace_back(k, j.dump(4));
+        c_entries.emplace_back(k.pack(), j.dump(4));
     }
 
     std::cout << "Writing comment data...." << std::endl;
@@ -290,10 +280,11 @@ Lexicon Utils::generate_lexicon(ISAMStorage &data_index) {
     std::cout << "Adding words to lexicon..." << std::endl;
     while (true) {
         auto entry = data_index.next();
+        auto key = CompoundKey::unpack(entry->first);
 
         if (!entry.has_value()) break;
 
-        auto k_type = static_cast<KeyType>(entry->first.key_type);
+        auto k_type = static_cast<KeyType>(key.key_type);
 
         if (k_type == KeyType::POST_BY_ID) {
             Post p = Post::from_json(nlohmann::json::parse(entry->second));

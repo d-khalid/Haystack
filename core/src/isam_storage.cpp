@@ -1,4 +1,4 @@
-#include "data_index.hpp"
+#include "isam_storage.hpp"
 
 #include <algorithm>
 
@@ -25,6 +25,11 @@ ISAMStorage::ISAMStorage(std::string index_file, std::string data_file) {
     load_index_file();
 }
 
+uint32_t ISAMStorage::size() {
+    return loaded_indexes.size();
+}
+
+
 void ISAMStorage::load_index_file() {
 
     if (index_loaded) {
@@ -32,26 +37,26 @@ void ISAMStorage::load_index_file() {
         return;
     }
 
+
+
     while (!index_in.eof()) {
         // Read the next index
         uint64_t raw_key;
         index_in.read(reinterpret_cast<char*>(&raw_key), sizeof(uint64_t));
 
-        CompoundKey key = CompoundKey::unpack(raw_key); // For returning
-
         uint64_t offset;
         index_in.read(reinterpret_cast<char*>(&offset), sizeof(uint64_t));
 
-        loaded_indexes.emplace_back(CompoundKey::unpack(raw_key), offset);
+        loaded_indexes.emplace_back(raw_key, offset);
     }
 
     if (!std::is_sorted(loaded_indexes.begin(), loaded_indexes.end(),
-        [](const std::pair<CompoundKey, uint64_t>& a, const std::pair<CompoundKey, uint64_t>& b) {
+        [](const std::pair<uint64_t, uint64_t>& a, const std::pair<uint64_t, uint64_t>& b) {
             return a.first < b.first;
         })) {
 
         std::sort(loaded_indexes.begin(), loaded_indexes.end(),
-        [](const std::pair<CompoundKey, uint64_t>& a, const std::pair<CompoundKey, uint64_t>& b) {
+        [](const std::pair<uint64_t, uint64_t>& a, const std::pair<uint64_t, uint64_t>& b) {
             return a.first < b.first;
         });
         std::cout << "STORAGE: Index was unsorted, sorted " << loaded_indexes.size() << " entries." << std::endl;
@@ -71,9 +76,9 @@ ISAMStorage::~ISAMStorage() {
     data_out.close();
 }
 
-void ISAMStorage::write(std::vector<std::pair<CompoundKey, std::string > > entries) {
+void ISAMStorage::write(std::vector<std::pair<uint64_t, std::string > > entries) {
 
-    std::vector<std::pair<CompoundKey, uint64_t> > new_indexes;
+    std::vector<std::pair<uint64_t, uint64_t> > new_indexes;
 
     // Write all data, store indexes
     for (auto p : entries) {
@@ -92,18 +97,18 @@ void ISAMStorage::write(std::vector<std::pair<CompoundKey, std::string > > entri
 
     // Sort new indexes
     std::sort(new_indexes.begin(), new_indexes.end(),
-    [](const std::pair<CompoundKey, uint64_t>& a, const std::pair<CompoundKey, uint64_t>& b) {
+    [](const std::pair<uint64_t, uint64_t>& a, const std::pair<uint64_t, uint64_t>& b) {
         return a.first < b.first; // This is an overloaded operator that compares 64-bit keys
     });
 
     // Merge with old indexes using std::merge
-    std::vector<std::pair<CompoundKey, uint64_t>> merged_indexes;
+    std::vector<std::pair<uint64_t, uint64_t>> merged_indexes;
     merged_indexes.reserve(loaded_indexes.size() + new_indexes.size());
 
     std::merge(loaded_indexes.begin(), loaded_indexes.end(),
                new_indexes.begin(), new_indexes.end(),
                std::back_inserter(merged_indexes),
-               [](const std::pair<CompoundKey, uint64_t>& a, const std::pair<CompoundKey, uint64_t>& b) {
+               [](const std::pair<uint64_t, uint64_t>& a, const std::pair<uint64_t, uint64_t>& b) {
                    return a.first < b.first;
                });
 
@@ -114,7 +119,7 @@ void ISAMStorage::write(std::vector<std::pair<CompoundKey, std::string > > entri
     // Write new indexes to file
     index_out.seekp(0);
     for (const auto& entry : loaded_indexes) {
-        uint64_t key = entry.first.pack(); // Assuming pack() returns uint64_t
+        uint64_t key = entry.first;
         uint64_t offset = entry.second;
         index_out.write(reinterpret_cast<const char*>(&key), sizeof(uint64_t));
         index_out.write(reinterpret_cast<const char*>(&offset), sizeof(uint64_t));
@@ -123,12 +128,12 @@ void ISAMStorage::write(std::vector<std::pair<CompoundKey, std::string > > entri
 
 }
 
-std::optional<std::pair<CompoundKey, std::string > > ISAMStorage::next() {
+std::optional<std::pair<uint64_t, std::string > > ISAMStorage::next() {
     if (index_ptr >= loaded_indexes.size()) {
         return std::nullopt;
     }
 
-    std::pair<CompoundKey, uint64_t > current_index = loaded_indexes[index_ptr++];
+    std::pair<uint64_t, uint64_t > current_index = loaded_indexes[index_ptr++];
 
     // Get the data, using offset (TODO: change data type of offset to long long)
     data_in.seekg((long long)current_index.second);
@@ -145,11 +150,11 @@ std::optional<std::pair<CompoundKey, std::string > > ISAMStorage::next() {
 }
 
 
-std::optional<std::pair<CompoundKey, std::string > > ISAMStorage::read(CompoundKey key) {
+std::optional<std::pair<uint64_t, std::string > > ISAMStorage::read(uint64_t key) {
 
     // Find the index, std::lower_bound uses binary search
     auto it = std::lower_bound(loaded_indexes.begin(), loaded_indexes.end(), key,
-           [](const std::pair<CompoundKey, uint64_t>& element, const CompoundKey& target) {
+           [](const std::pair<uint64_t, uint64_t>& element, const uint64_t& target) {
                return element.first < target;
            });
 
@@ -169,6 +174,7 @@ std::optional<std::pair<CompoundKey, std::string > > ISAMStorage::read(CompoundK
 
     return std::nullopt;
 }
+
 
 
 

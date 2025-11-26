@@ -14,7 +14,7 @@ Lexicon::Lexicon() {
     next_id = 1;
 }
 
-uint32_t Lexicon::add_word(std::string word) {
+uint64_t Lexicon::add_word(std::string word) {
 
     // Check if exists before adding
     if (word_to_id.count(word) > 0) {
@@ -28,7 +28,7 @@ uint32_t Lexicon::add_word(std::string word) {
     return next_id++;
 }
 
-uint32_t Lexicon::size() {
+uint64_t Lexicon::size() {
     return id_to_word.size();
 }
 
@@ -48,7 +48,7 @@ std::string Lexicon::get_word(int word_id) {
     return id_to_word[word_id];
 }
 
-uint32_t Lexicon::get_word_id(std::string word) {
+uint64_t Lexicon::get_word_id(std::string word) {
     return word_to_id.count(word) == 0 ? 0 : word_to_id[word];
 }
 
@@ -78,12 +78,12 @@ bool Lexicon::load(std::string file_path) {
         std::cerr << "Lexicon already has data! File " << file_path << "not loaded." << std::endl;
     }
 
-    std::fstream lex_file(file_path, std::ios::out); // Output mode
+    std::fstream lex_file(file_path, std::ios::in); // Output mode
 
     std::string word_buffer;
 
     // Load words into lexicon from file
-    while (lex_file >> word_buffer) {
+    while (getline(lex_file, word_buffer)) {
         add_word(word_buffer);
     }
 
@@ -96,7 +96,7 @@ std::vector<std::string> Lexicon::tokenize_text(std::string text, char delim) {
     std::vector<std::string> tokens;
 
     // Trim before parsing
-    text = trim(text);
+    text = trim(text, ".,().\"'?:;[]&^%$", ".,().\"'?:;[]&^%$");
     for (int i = 0; i < text.size(); i++) {
         if (text[i] == delim) {
             tokens.push_back(normalize_token(
@@ -116,8 +116,8 @@ std::vector<std::string> Lexicon::tokenize_text(std::string text, char delim) {
 // TODO: Handle symbols properly,
 // problem is that some symbols are meaningful parts of tech terms (e.g C#, .NET, dots in versioning, etc)
 std::string Lexicon::normalize_token(std::string token) {
-    // Trim, remove commas and periods
-    token = trim(token, ".,", ",.");
+    // Trim, remove some less meaningful symbols (workaround for now)
+    token = trim(token, ".,().\"'?:;[]&^%$", ".,().\"'?:;[]&^%$");
 
     // To lowercase
     std::transform(token.begin(), token.end(), token.begin(),
@@ -129,7 +129,7 @@ std::string Lexicon::normalize_token(std::string token) {
 // You can specify more characters to be trimmed from left or right as needed
 std::string Lexicon::trim(const std::string &source, std::string remove_left, std::string remove_right) {
     std::string s(source);
-    s.erase(0, s.find_first_not_of(remove_left.append(" \n\r\t")));
-    s.erase(s.find_last_not_of(remove_right.append(" \n\r\t")) + 1);
+    s.erase(0, s.find_first_not_of(remove_left + " \n\r\t"));
+    s.erase(s.find_last_not_of(remove_right + " \n\r\t") + 1);
     return s;
 }
