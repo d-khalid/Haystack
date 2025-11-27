@@ -2,6 +2,7 @@
 #define POST_HPP
 #include <vector>
 #include "nlohmann/json.hpp"
+
 #include "compound_key.hpp"
 
 class Post {
@@ -47,28 +48,29 @@ public:
 
     // Serialization functions (because C++ doesn't have reflection!)
     static nlohmann::json to_json(const Post &post) {
-        return nlohmann::json{
-            {"site_id", static_cast<int>(post.site_id)},
-            {"post_id", post.post_id},
-            {"post_type_id", post.post_type_id},
-            {"title", post.title},
-            {"body", post.body},
-            {"tags", post.tags},
-            {"cleaned_body", post.cleaned_body},
-            {"parent_id", post.parent_id},
-            {"accepted_answer_id", post.accepted_answer_id},
-            {"owner_user_id", post.owner_user_id},
-            {"last_editor_user_id", post.last_editor_user_id},
-            {"score", post.score},
-            {"view_count", post.view_count},
-            {"answer_count", post.answer_count},
-            {"comment_count", post.comment_count},
-            {"creation_date", post.creation_date},
-            {"last_edit_date", post.last_edit_date},
-            {"last_activity_date", post.last_activity_date},
-            {"content_license", post.content_license}
-        };
-    }
+    return nlohmann::json{
+        {"site_id", static_cast<int>(post.site_id)},
+        {"post_id", post.post_id},
+        {"post_type_id", post.post_type_id},
+        {"title", post.title},
+        {"body", post.body},
+        {"tags", post.tags},  // vector<string> is handled by nlohmann::json
+        {"cleaned_body", post.cleaned_body},
+        {"parent_id", post.parent_id.value_or(0)},              // optional<int>
+        {"accepted_answer_id", post.accepted_answer_id.value_or(0)},
+        {"owner_user_id", post.owner_user_id.value_or(0)},
+        {"last_editor_user_id", post.last_editor_user_id.value_or(0)},
+        {"score", post.score},
+        {"view_count", post.view_count},
+        {"answer_count", post.answer_count},
+        {"comment_count", post.comment_count},
+        {"creation_date", post.creation_date},                 // make sure this is int/string
+        {"last_edit_date", post.last_edit_date},
+        {"last_activity_date", post.last_activity_date},
+        {"content_license", post.content_license}
+    };
+}
+
 
     static Post from_json(const nlohmann::json &j) {
         Post post;

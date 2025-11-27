@@ -20,4 +20,15 @@ target_link_libraries(haystack_core PUBLIC pugixml)
 target_link_libraries(haystack_core PUBLIC nlohmann_json::nlohmann_json)
 target_link_libraries(haystack_core PUBLIC GTest::gtest)
 
+target_sources(core
+    PRIVATE
+        src/lexicon.cpp
+        src/utils.cpp
+        src/data_index.cpp
+        src/forward_index.cpp  # <--- add this
+)
+target_include_directories(core
+    PUBLIC include
+)
+
 
