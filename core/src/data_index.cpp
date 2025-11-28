@@ -122,7 +122,20 @@ void ISAMStorage::write(std::vector<std::pair<CompoundKey, std::string > > entri
     index_out.flush();
 
 }
+void ISAMStorage::reset_iterator() {
+    //  Reset the pointer for the vector of loaded indexes
+    this->index_ptr = 0;
 
+    // Reset the read file stream for sequential access
+    // This seeks the input stream (data_in) to position 0 (the beginning of the data file).
+    this->data_in.clear(); // Clear any end-of-file flags
+    this->data_in.seekg(0, std::ios::beg);
+
+    // Note: Since you read the index into memory on load, you don't need to re-read the index file (index_in).
+    // The iterator (index_ptr) pointing to the loaded_indexes vector is sufficient.
+
+    std::cout << "STORAGE: Iterator reset for sequential access." << std::endl;
+}
 std::optional<std::pair<CompoundKey, std::string > > ISAMStorage::next() {
     if (index_ptr >= loaded_indexes.size()) {
         return std::nullopt;

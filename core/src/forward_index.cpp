@@ -1,5 +1,11 @@
-#include "forward_index.hpp"
+
 #include <nlohmann/json.hpp>
+#include "forward_index.hpp"
+#include "data_index.hpp" // For ISAMStorage
+#include "lexicon.hpp"    // For Lexicon
+#include "post.hpp"       // For Post
+#include "compound_key.hpp" // For CompoundKey
+
 
 std::vector<ForwardIndex::Entry>
 ForwardIndex::build(ISAMStorage& storage, Lexicon& lexicon)

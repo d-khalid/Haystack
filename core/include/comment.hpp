@@ -26,17 +26,16 @@ public:
     // Default constructor
     Comment() : site_id(SiteID::ASK_UBUNTU), comment_id(0), post_id(0), score(0) {
     }
-
     // Serialization functions
     static nlohmann::json to_json(const Comment &comment) {
         return nlohmann::json{
-                {"site_id", static_cast<int>(comment.site_id)},
-                {"comment_id", comment.comment_id},
-                {"post_id", comment.post_id},
-                {"text", comment.text},
-                {"user_id", comment.user_id},
-                {"score", comment.score},
-                {"creation_date", comment.creation_date}
+                    {"site_id", static_cast<int>(comment.site_id)},
+                    {"comment_id", comment.comment_id},
+                    {"post_id", comment.post_id},
+                    {"text", comment.text},
+                    {"user_id", comment.user_id},
+                    {"score", comment.score},
+                    {"creation_date", comment.creation_date}
         };
     }
 

@@ -23,6 +23,8 @@ public:
     // Metrics
     uint32_t count; // Number of posts using this tag
 
+
+
     // Default constructor
     Tag() : site_id(SiteID::ASK_UBUNTU), tag_id(0), count(0) {
     }
@@ -45,6 +47,10 @@ public:
     // // Write single entry into the files
     // void write(std::pair<CompoundKey, std::string > entry);
 
+    /**
+     * @brief Resets the internal file pointer to the beginning for sequential reading.
+     */
+    void reset_iterator();
     // Get next entry from the files
     std::optional<std::pair<CompoundKey, std::string > > next();
 

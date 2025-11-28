@@ -1,10 +1,14 @@
 # NOTE: Most third-party libraries are to be added here
 
+# Ensure all your necessary source files are listed here ONLY ONCE
 add_library(haystack_core
         src/lexicon.cpp
         src/data_index.cpp
         src/compound_key.cpp
         src/utils.cpp
+        src/forward_index.cpp
+        src/reverse_index.cpp
+        include/reverse_index.hpp
 )
 
 # Include directories
@@ -20,15 +24,5 @@ target_link_libraries(haystack_core PUBLIC pugixml)
 target_link_libraries(haystack_core PUBLIC nlohmann_json::nlohmann_json)
 target_link_libraries(haystack_core PUBLIC GTest::gtest)
 
-target_sources(core
-    PRIVATE
-        src/lexicon.cpp
-        src/utils.cpp
-        src/data_index.cpp
-        src/forward_index.cpp  # <--- add this
-)
-target_include_directories(core
-    PUBLIC include
-)
 
 
