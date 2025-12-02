@@ -23,11 +23,15 @@ public:
 
     uint32_t size();
 
+    // Bring iterator for next() back to beginning of index file
+    void reset_iterator();
+
     // Get next entry from the files
     std::optional<std::pair<uint64_t, std::string > > next();
 
     // Get the data for a specific index, may find nothing
     std::optional<std::pair<uint64_t, std::string > > read(uint64_t key);
+
 
 
 private:

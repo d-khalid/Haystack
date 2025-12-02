@@ -8,19 +8,21 @@
 
 ISAMStorage::ISAMStorage(std::string index_file, std::string data_file) {
     // Check if exists
-    if (!std::filesystem::exists(index_file)) {
-        throw std::invalid_argument("The file [" + index_file + "] does not exist.");
-    }
-    if (!std::filesystem::exists(data_file)) {
-        throw std::invalid_argument("The file [" + data_file + "] does not exist.");
-    }
+    // if (!std::filesystem::exists(index_file)) {
+    //     throw std::invalid_argument("The file [" + index_file + "] does not exist.");
+    // }
+    // if (!std::filesystem::exists(data_file)) {
+    //     throw std::invalid_argument("The file [" + data_file + "] does not exist.");
+    // }
+
+    index_out.open(index_file, std::ios::binary | std::ios::out | std::ios::app);
+    data_out.open(data_file, std::ios::binary | std::ios::out | std::ios::app); // Order doesn't matter for this
 
     // Open descriptors
     index_in.open(index_file, std::ios::binary | std::ios::in);
     data_in.open(data_file, std::ios::binary | std::ios::in);
 
-    index_out.open(index_file, std::ios::binary | std::ios::out | std::ios::app);
-    data_out.open(data_file, std::ios::binary | std::ios::out | std::ios::app); // Order doesn't matter for this
+
 
     load_index_file();
 }
@@ -174,6 +176,11 @@ std::optional<std::pair<uint64_t, std::string > > ISAMStorage::read(uint64_t key
 
     return std::nullopt;
 }
+
+void ISAMStorage::reset_iterator() {
+    index_ptr = 0;
+}
+
 
 
 

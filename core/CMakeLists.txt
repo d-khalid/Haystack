@@ -5,6 +5,10 @@ add_library(haystack_core
         src/isam_storage.cpp
         src/compound_key.cpp
         src/utils.cpp
+        include/reverse_index.hpp
+        src/reverse_index.cpp
+        src/forward_index.cpp
+        include/forward_index.hpp
 )
 
 # Include directories

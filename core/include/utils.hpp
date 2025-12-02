@@ -16,7 +16,7 @@
 class Utils {
 public:
     // Write comments and posts into data index as JSON
-    static void generate_data_index(ISAMStorage& data_index, const std::string& post_file, const std::string& comment_file);
+    static void generate_data_index(ISAMStorage& data_index, const std::string& post_file);
 
     // Create the lexicon from the data index
     static Lexicon generate_lexicon(ISAMStorage& data_index);

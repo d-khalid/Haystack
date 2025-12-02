@@ -224,7 +224,7 @@ std::vector<Comment> Utils::parse_comments_from_xml(const std::string& xml_file_
     return comments;
 }
 
-void Utils::generate_data_index(ISAMStorage& data_index, const std::string& post_file, const std::string& comments_file) {
+void Utils::generate_data_index(ISAMStorage& data_index, const std::string& post_file) {
     auto posts = parse_posts_from_xml(post_file, SiteID::ASK_UBUNTU);
 
     // Generate entries
@@ -248,29 +248,7 @@ void Utils::generate_data_index(ISAMStorage& data_index, const std::string& post
     data_index.write(p_entries);
     std::cout << "Data for " << posts.size() << " posts written to data index.\n" << std::endl;
 
-    // COMMENTS
-    auto comments = parse_comments_from_xml(comments_file, SiteID::ASK_UBUNTU);
 
-    // Generate entries
-    std::vector<std::pair<uint64_t, std::string>> c_entries;
-    c_entries.reserve(comments.size());
-
-
-    KeyType c_type = KeyType::COMMENT_BY_ID;
-    SiteID c_site = SiteID::ASK_UBUNTU;
-    for (const auto& comment : comments) {
-        uint32_t c_id = comment.post_id;
-
-        CompoundKey k(static_cast<uint8_t>(c_type), static_cast<uint16_t>(c_site), c_id, 0);
-
-        nlohmann::json j = Comment::to_json(comment);
-
-        c_entries.emplace_back(k.pack(), j.dump(4));
-    }
-
-    std::cout << "Writing comment data...." << std::endl;
-    data_index.write(c_entries);
-    std::cout << "Data for " << comments.size() << " comments written to data index." << std::endl;
 }
 
 Lexicon Utils::generate_lexicon(ISAMStorage &data_index) {
@@ -283,6 +261,7 @@ Lexicon Utils::generate_lexicon(ISAMStorage &data_index) {
         auto key = CompoundKey::unpack(entry->first);
 
         if (!entry.has_value()) break;
+
 
         auto k_type = static_cast<KeyType>(key.key_type);
 
@@ -303,11 +282,6 @@ Lexicon Utils::generate_lexicon(ISAMStorage &data_index) {
             else if (p.post_type_id == 2) { // Go over body only for answers
                 l.add_words(Lexicon::tokenize_text(p.cleaned_body));
             }
-        } else if (k_type == KeyType::COMMENT_BY_ID) {
-            Comment c = Comment::from_json(nlohmann::json::parse(entry->second));
-
-            // Go over text field only
-            l.add_words(Lexicon::tokenize_text(c.text));
         }
         std::cout << "\rLoaded " << count + 1 << " entries, lexicon has " << l.size() << " tokens." << std::flush;
         count++;
