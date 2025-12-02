@@ -24,22 +24,26 @@ int main(int argc, char** argv) {
     bool gen_data_index = false;
     app.add_flag("--data-index-gen", gen_data_index, "Generate data index");
 
+    bool show_data_index = false;
+    app.add_flag("--data-index-show", show_data_index, "Show data index");
+
     bool gen_lexicon = false;
     app.add_flag("--lexicon-gen", gen_lexicon, "Generate lexicon");
 
     bool gen_forward_index = false;
     app.add_flag("--forward-index-gen", gen_forward_index, "Generate forward index");
 
+    bool show_f_index = false;
+    app.add_flag("--forward-index-show", show_f_index, "Show forward index");
+
     bool gen_reverse_index = false;
     app.add_flag("--reverse-index-gen", gen_reverse_index, "Generate reverse index");
 
+    bool show_r_index = false;
+    app.add_flag("--reverse-index-show", show_r_index, "Show reverse index");
+
     CLI11_PARSE(app, argc, argv);
 
-    // At least one flag must be set
-    if (!gen_data_index && !gen_lexicon && !gen_forward_index && !gen_reverse_index) {
-        std::cerr << "Error: Specify at least one generation option\n";
-        return 1;
-    }
 
     if (gen_data_index) {
         std::string path = input_dir + "/Posts.xml";
@@ -47,6 +51,21 @@ int main(int argc, char** argv) {
 
         ISAMStorage data_index(input_dir + "/data_index.idx", input_dir + "/data_index.dat");
         Utils::generate_data_index(data_index, path);
+    }
+
+    if (show_data_index) {
+        ISAMStorage data_index(input_dir + "/data_index.idx", input_dir + "/data_index.dat");
+
+        while (true) {
+            auto entry = data_index.next();
+            if (!entry.has_value()) break;
+
+            CompoundKey k = CompoundKey::unpack(entry->first);
+
+            std::cout << "KEY: " << k.to_string() << std::endl;
+
+            std::cout << "DATA: " << entry->second << std::endl << std::endl;
+        }
     }
 
     if (gen_lexicon) {
@@ -59,7 +78,7 @@ int main(int argc, char** argv) {
     }
 
     if (gen_forward_index) {
-        std::cout << "Generating reverse index" << "\n";
+        std::cout << "Generating forward index" << "\n";
 
         ISAMStorage forward_index(input_dir + "/forward_index.idx", input_dir + "/forward_index.dat");
         ISAMStorage data_index(input_dir + "/data_index.idx", input_dir + "/data_index.dat");
@@ -67,6 +86,21 @@ int main(int argc, char** argv) {
         l.load(input_dir + "/lexicon.txt");
 
         ForwardIndex::generate(forward_index, data_index, l);
+    }
+
+    if (show_f_index) {
+        ISAMStorage forward_index(input_dir + "/forward_index.idx", input_dir + "/forward_index.dat");
+
+        while (true) {
+            auto entry = forward_index.next();
+            if (!entry.has_value()) break;
+
+            CompoundKey k = CompoundKey::unpack(entry->first);
+
+            std::cout << "KEY: " << k.to_string() << std::endl;
+
+            std::cout << "DATA: " << entry->second << std::endl << std::endl;
+        }
     }
 
     if (gen_reverse_index) {
@@ -80,6 +114,22 @@ int main(int argc, char** argv) {
         ReverseIndex r;
         r.build(forward_index,  l);
         r.write_to_disk(reverse_index);
+    }
+
+    if (show_r_index) {
+        ISAMStorage reverse_index(input_dir + "/reverse_index.idx", input_dir + "/reverse_index.dat");
+        Lexicon l;
+        l.load(input_dir + "/lexicon.txt");
+
+        while (true) {
+            auto entry = reverse_index.next();
+            if (!entry.has_value()) break;
+
+
+            std::cout << "WORD: " << "(" << entry->first << "," << l.get_word(entry->first) << ")" << std::endl;
+
+            std::cout << "POST-IDs: " << entry->second << std::endl << std::endl;
+        }
     }
 
     return 0;

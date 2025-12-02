@@ -16,7 +16,7 @@ ISAMStorage::ISAMStorage(std::string index_file, std::string data_file) {
     // }
 
     index_out.open(index_file, std::ios::binary | std::ios::out | std::ios::app);
-    data_out.open(data_file, std::ios::binary | std::ios::out | std::ios::app); // Order doesn't matter for this
+    data_out.open(data_file, std::ios::binary | std::ios::out | std::ios::app);
 
     // Open descriptors
     index_in.open(index_file, std::ios::binary | std::ios::in);
@@ -41,13 +41,15 @@ void ISAMStorage::load_index_file() {
 
 
 
-    while (!index_in.eof()) {
-        // Read the next index
+    while (index_in.peek() != EOF) {
         uint64_t raw_key;
-        index_in.read(reinterpret_cast<char*>(&raw_key), sizeof(uint64_t));
-
         uint64_t offset;
+
+        index_in.read(reinterpret_cast<char*>(&raw_key), sizeof(uint64_t));
         index_in.read(reinterpret_cast<char*>(&offset), sizeof(uint64_t));
+
+        // Check if reads succeeded
+        if (!index_in) break;
 
         loaded_indexes.emplace_back(raw_key, offset);
     }

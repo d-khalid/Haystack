@@ -258,11 +258,10 @@ Lexicon Utils::generate_lexicon(ISAMStorage &data_index) {
     std::cout << "Adding words to lexicon..." << std::endl;
     while (true) {
         auto entry = data_index.next();
-        auto key = CompoundKey::unpack(entry->first);
 
         if (!entry.has_value()) break;
 
-
+        auto key = CompoundKey::unpack(entry->first);
         auto k_type = static_cast<KeyType>(key.key_type);
 
         if (k_type == KeyType::POST_BY_ID) {

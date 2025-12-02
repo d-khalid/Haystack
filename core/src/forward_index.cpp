@@ -59,7 +59,7 @@ ForwardIndex::generate(ISAMStorage& output_store,
 
         result.emplace_back(p->first, data);
 
-        std::cout << "Indexed " << (c + 1)
+        std::cout << "\rIndexed " << (c + 1)
                   << " entries in forward index." << std::flush;
 
         c++;
