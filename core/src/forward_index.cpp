@@ -8,7 +8,9 @@
 #include "nlohmann/json.hpp"
 
 void
-ForwardIndex::generate(ISAMStorage& output_store, ISAMStorage& data_index, Lexicon& lexicon)
+ForwardIndex::generate(ISAMStorage& output_store,
+                       ISAMStorage& data_index,
+                       Lexicon& lexicon)
 {
     std::vector<std::pair<uint64_t, std::string>> result;
     result.reserve(data_index.size());
@@ -25,32 +27,46 @@ ForwardIndex::generate(ISAMStorage& output_store, ISAMStorage& data_index, Lexic
 
         std::string data = "";
 
-        // Format: WordID,Mask space seperated
-        // Masks Used: (0: None), (1:Title), (2:Body), (3:Tag)
+        // Format:
+        // wordID,Mask (space separated)
+        //
+        // Masks:
+        // 1 = Title
+        // 2 = Body
+        // 3 = Tag
+
+        // ---------- TITLE ----------
         if (post.post_type_id == 1) {
             auto t_tokens = Lexicon::tokenize_text(post.title);
-            for (auto t : t_tokens) {
-                data += (t + ",1 ");
+            for (auto& t : t_tokens) {
+                uint64_t wid = lexicon.get_word_id(t);
+                data += std::to_string(wid) + ",1 ";
             }
         }
+
+        // ---------- BODY ----------
         auto b_tokens = Lexicon::tokenize_text(post.cleaned_body);
-        for (auto t : b_tokens) {
-            data += (t + ",2 ");
+        for (auto& t : b_tokens) {
+            uint64_t wid = lexicon.get_word_id(t);
+            data += std::to_string(wid) + ",2 ";
         }
 
-        for (auto t : post.tags) {
-            data += (t + ",3 ");
+        // ---------- TAGS ----------
+        for (auto& t : post.tags) {
+            uint64_t wid = lexicon.get_word_id(t);
+            data += std::to_string(wid) + ",3 ";
         }
+
         result.emplace_back(p->first, data);
-        std::cout << "Indexed " << (c+1) << "entries in forward index." << std::flush;
+
+        std::cout << "Indexed " << (c + 1)
+                  << " entries in forward index." << std::flush;
+
+        c++;
     }
     std::cout << std::endl;
 
-    std::cout << "Writing entries to disk...";
+    std::cout << "Writing entries to disk";
     output_store.write(result);
+    std::cout << "done." << std::endl;
 }
-
-
-
-
-
