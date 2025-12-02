@@ -35,7 +35,7 @@ ForwardIndex::generate(ISAMStorage& output_store,
         // 2 = Body
         // 3 = Tag
 
-        // ---------- TITLE ----------
+        //  TITLE 
         if (post.post_type_id == 1) {
             auto t_tokens = Lexicon::tokenize_text(post.title);
             for (auto& t : t_tokens) {
@@ -44,14 +44,14 @@ ForwardIndex::generate(ISAMStorage& output_store,
             }
         }
 
-        // ---------- BODY ----------
+        //  BODY 
         auto b_tokens = Lexicon::tokenize_text(post.cleaned_body);
         for (auto& t : b_tokens) {
             uint64_t wid = lexicon.get_word_id(t);
             data += std::to_string(wid) + ",2 ";
         }
 
-        // ---------- TAGS ----------
+        //TAGS 
         for (auto& t : post.tags) {
             uint64_t wid = lexicon.get_word_id(t);
             data += std::to_string(wid) + ",3 ";
