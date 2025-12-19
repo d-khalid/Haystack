@@ -1,0 +1,6 @@
+@Haystack_HostAddress = http://localhost:5128
+
+GET {{Haystack_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
