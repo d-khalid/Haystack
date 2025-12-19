@@ -27,14 +27,79 @@ public class Program
         var builder = WebApplication.CreateBuilder(args);
         builder.Services.AddControllers();
         
-        // Register your components for the API to use
-        builder.Services.AddSingleton<Lexicon>();
-        // builder.Services.AddSingleton<QueryProcessor>();
+        // Get the data directory from configuration or use default
+        var configuration = builder.Configuration;
+        string dataDir = configuration.GetSection("DataDirectory").Value ?? "stackexchange-data";
+        int numBarrels = int.Parse(configuration.GetSection("NumBarrels").Value ?? "4");
+
+        // Register components for the API to use
+        builder.Services.AddSingleton<Lexicon>(sp =>
+        {
+            var lexicon = new Lexicon();
+            var lexiconPath = Path.Combine(dataDir, "lexicon.txt");
+            if (File.Exists(lexiconPath))
+            {
+                lexicon.Load(lexiconPath);
+            }
+            return lexicon;
+        });
+
+        builder.Services.AddSingleton<AutocompleteService>(sp =>
+        {
+            var autocompleteService = new AutocompleteService();
+            var vocabPath = Path.Combine(dataDir, "vocab.txt");
+            if (File.Exists(vocabPath))
+            {
+                autocompleteService.LoadFromFile(vocabPath);
+            }
+            return autocompleteService;
+        });
+
+        builder.Services.AddSingleton<ISAMStorage>(sp =>
+        {
+            return new ISAMStorage(Path.Combine(dataDir, "data_index"));
+        });
+
+        builder.Services.AddSingleton<QueryEngine>(sp =>
+        {
+            var lexicon = sp.GetRequiredService<Lexicon>();
+            var dataIndex = sp.GetRequiredService<ISAMStorage>();
+            return new QueryEngine(dataDir, lexicon, numBarrels, dataIndex);
+        });
 
         var app = builder.Build();
         app.MapControllers();
+
+        // Start background task to flush delta index every 2 hours
+        var queryEngine = app.Services.GetRequiredService<QueryEngine>();
+        _ = Task.Run(() => StartFlushBackgroundTask(queryEngine));
+
         app.Run();
         return 0;
+    }
+
+    /// <summary>
+    /// Background task that periodically flushes the delta index to disk.
+    /// Runs every 2 hours to persist newly added posts.
+    /// </summary>
+    private static async Task StartFlushBackgroundTask(QueryEngine queryEngine)
+    {
+        const int flushIntervalMs = 2 * 60 * 60 * 1000; // 2 hours in milliseconds
+        
+        while (true)
+        {
+            try
+            {
+                await Task.Delay(flushIntervalMs);
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Starting background flush of delta index...");
+                queryEngine.FlushDeltaToDisk();
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Delta index flush completed successfully.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Error during delta index flush: {ex.Message}");
+            }
+        }
     }
 
     private static async Task<int> RunCli(string[] args)

@@ -113,27 +113,35 @@ public static class InvertedIndex
         }
     }
 
-    /// <summary>
-    /// Returns a list of DocIDs for a word, already sorted by their importance.
-    /// </summary>
-    public static List<uint> Search(string directory, int numBarrels, uint wordId)
+   /// <summary>
+/// Retrieves a list of postings (DocID and Score) for a specific word from its assigned barrel.
+/// </summary>
+public static List<Posting> SearchWithScores(string directory, int numBarrels, uint wordId)
+{
+    int barrelId = (int)(wordId % (uint)numBarrels);
+    string path = Path.Combine(directory, $"barrel_{barrelId}.dat");
+    
+    if (!File.Exists(path)) return new List<Posting>();
+
+    foreach (var line in File.ReadLines(path))
     {
-        int barrelId = (int)(wordId % (uint)numBarrels);
-        string path = Path.Combine(directory, $"barrel_{barrelId}.dat");
-        if (!File.Exists(path)) return new List<uint>();
-
-        foreach (var line in File.ReadLines(path))
+        var parts = line.Split('|');
+        if (parts.Length == 2 && uint.TryParse(parts[0], out uint id) && id == wordId)
         {
-            var parts = line.Split('|');
-            if (parts.Length == 2 && uint.TryParse(parts[0], out uint id) && id == wordId)
-            {
-                // Each segment is DocId:Score, we just want the DocId
-                return parts[1].Split(',')
-                    .Select(s => uint.Parse(s.Split(':')[0]))
-                    .ToList();
-            }
+            return parts[1].Split(',')
+                .Select(segment => 
+                {
+                    var data = segment.Split(':');
+                    return new Posting 
+                    { 
+                        DocId = uint.Parse(data[0]), 
+                        Score = int.Parse(data[1]) 
+                    };
+                })
+                .ToList();
         }
-
-        return new List<uint>();
     }
+
+    return new List<Posting>();
+}
 }

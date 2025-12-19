@@ -5,9 +5,9 @@ using System.Linq;
 
 public class Lexicon
 {
-    private readonly Dictionary<string, ulong> _wordToId = new();
+    private readonly Dictionary<string, uint> _wordToId = new();
     private readonly List<string> _idToWord = new();
-    private ulong _nextId = 1;
+    private uint _nextId = 1;
 
     public Lexicon()
     {
@@ -29,7 +29,7 @@ public class Lexicon
         (long Key, byte[] Data)? entry;
         while ((entry = dataIndex.Next()) != null)
         {
-            CompoundKey ck = CompoundKey.Unpack((ulong)entry.Value.Key);
+            CompoundKey ck = CompoundKey.Unpack((uint)entry.Value.Key);
 
             if (ck.KeyType == (byte)KeyType.PostById)
             {
@@ -73,9 +73,9 @@ public class Lexicon
         return (lexicon, autocomplete);
     }
 
-    public ulong AddWord(string word)
+    public uint AddWord(string word)
     {
-        if (_wordToId.TryGetValue(word, out ulong id))
+        if (_wordToId.TryGetValue(word, out uint id))
             return id;
 
         _idToWord.Add(word);
@@ -84,17 +84,17 @@ public class Lexicon
         return _nextId++;
     }
 
-    public string GetWord(ulong id)
+    public string GetWord(uint id)
     {
-        if (id == 0 || id >= (ulong)_idToWord.Count)
+        if (id == 0 || id >= (uint)_idToWord.Count)
             return string.Empty;
             
         return _idToWord[(int)id];
     }
 
-    public ulong GetWordId(string word)
+    public uint GetWordId(string word)
     {
-        return _wordToId.TryGetValue(word, out ulong id) ? id : 0;
+        return _wordToId.TryGetValue(word, out uint id) ? id : 0;
     }
 
     // File Format: newline-delimited word
