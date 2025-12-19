@@ -6,6 +6,8 @@ using System.Web;
 
 public static class DataIndex
 {
+    private const int PostLimit = 100000; // Soft limit for indexing
+
     public static void Generate(ISAMStorage dataIndex, string xmlPath, SiteID siteId)
     {
         int count = 0;
@@ -37,6 +39,13 @@ public static class DataIndex
                         batch.Clear();
                         Console.Write($"\rImported {count} posts into DataIndex...");
                     }
+
+                    // Stop at soft limit
+                    if (count >= PostLimit)
+                    {
+                        Console.WriteLine($"\nReached soft limit of {PostLimit} posts. Stopping import.");
+                        break;
+                    }
                 }
             }
         }
@@ -63,8 +72,12 @@ public static class DataIndex
             Body = rawBody,
             CleanedBody = CleanHtml(rawBody),
             Score = int.Parse(reader.GetAttribute("Score") ?? "0"),
+            ViewCount = uint.Parse(reader.GetAttribute("ViewCount") ?? "0"),
+            AnswerCount = uint.Parse(reader.GetAttribute("AnswerCount") ?? "0"),
             CommentCount = uint.Parse(reader.GetAttribute("CommentCount") ?? "0"),
             CreationDate = reader.GetAttribute("CreationDate") ?? "",
+            LastEditDate = reader.GetAttribute("LastEditDate") ?? "",
+            LastActivityDate = reader.GetAttribute("LastActivityDate") ?? "",
             ContentLicense = reader.GetAttribute("ContentLicense") ?? ""
         };
 
@@ -79,6 +92,7 @@ public static class DataIndex
         if (uint.TryParse(reader.GetAttribute("ParentId"), out uint pId)) post.ParentId = pId;
         if (uint.TryParse(reader.GetAttribute("AcceptedAnswerId"), out uint aId)) post.AcceptedAnswerId = aId;
         if (uint.TryParse(reader.GetAttribute("OwnerUserId"), out uint uId)) post.OwnerUserId = uId;
+        if (uint.TryParse(reader.GetAttribute("LastEditorUserId"), out uint leId)) post.LastEditorUserId = leId;
 
         return post;
     }

@@ -138,7 +138,56 @@ GET /api/search/autocomplete?prefix=linq&limit=50
 
 ---
 
-### 3. Add Posts
+### 3. Get Post
+**Endpoint:** `GET /api/search/post/{postId}`
+
+**Description:** Retrieves a single post by its ID. Returns the complete post object with all details.
+
+**Path Parameters:**
+- `postId` (integer, required): The ID of the post to retrieve
+
+**Response (200 OK):**
+```json
+{
+  "siteId": 1,
+  "postId": 12345,
+  "postTypeId": 1,
+  "title": "Question Title",
+  "body": "Full HTML body...",
+  "tags": ["tag1", "tag2"],
+  "cleanedBody": "Cleaned text body...",
+  "parentId": null,
+  "acceptedAnswerId": 67890,
+  "ownerUserId": 999,
+  "lastEditorUserId": 1000,
+  "score": 42,
+  "viewCount": 1500,
+  "answerCount": 3,
+  "commentCount": 5,
+  "creationDate": "2023-01-15T10:30:00",
+  "lastEditDate": "2023-02-20T14:25:00",
+  "lastActivityDate": "2023-02-20T14:25:00",
+  "contentLicense": "CC BY-SA 4.0"
+}
+```
+
+**Error Responses:**
+- `400 Bad Request`: If postId is zero or invalid
+- `404 Not Found`: If the post does not exist
+- `500 Internal Server Error`: If an error occurs during retrieval
+
+**Example Requests:**
+```bash
+# Get a specific post
+GET /api/search/post/12345
+
+# Get another post
+GET /api/search/post/67890
+```
+
+---
+
+### 4. Add Posts
 **Endpoint:** `POST /api/search/add-posts`
 
 **Description:** Adds new posts to the runtime memory buffer (delta index). Posts are indexed immediately and become searchable, but are not persisted to disk until `FlushDeltaToDisk` is called. This is useful for real-time indexing of newly added content.

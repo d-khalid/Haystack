@@ -100,6 +100,57 @@ public class SearchController : ControllerBase
     }
 
     /// <summary>
+    /// Retrieves a single post by its ID.
+    /// Returns the complete post object.
+    /// </summary>
+    /// <param name="postId">The ID of the post to retrieve</param>
+    /// <returns>The post object</returns>
+    [HttpGet("post/{postId}")]
+    public ActionResult<Post> GetPost(uint postId)
+    {
+        if (postId == 0)
+        {
+            return BadRequest(new { error = "Post ID must be a positive integer" });
+        }
+
+        try
+        {
+            // Construct the compound key used to store this post
+            CompoundKey ck = new CompoundKey(
+                (byte)KeyType.PostById,
+                (ushort)SiteID.AskUbuntu,
+                postId
+            );
+            
+            Console.WriteLine($"[API] Getting post {postId} with compound key: {ck.Pack()}");
+            var postData = _dataIndex.Get((long)ck.Pack());
+            
+            if (postData == null)
+            {
+                Console.WriteLine($"[API] Post {postId} not found in storage");
+                return NotFound(new { error = $"Post with ID {postId} not found" });
+            }
+
+            try
+            {
+                var post = Post.Deserialize(postData);
+                Console.WriteLine($"[API] Successfully retrieved post {postId}");
+                return Ok(post);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[API] Failed to deserialize post {postId}: {ex.Message}");
+                return StatusCode(500, new { error = "Failed to deserialize post data", details = ex.Message });
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[API] Error getting post {postId}: {ex}");
+            return StatusCode(500, new { error = "An error occurred while retrieving the post", details = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Provides autocomplete suggestions based on a prefix.
     /// Returns the most likely words that start with the given prefix.
     /// </summary>
