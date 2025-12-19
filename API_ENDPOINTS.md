@@ -1,7 +1,33 @@
 # Haystack API Endpoints Documentation
 
 ## Overview
-The SearchController provides two main API endpoints for searching and autocomplete functionality.
+The SearchController provides three main API endpoints for searching, autocomplete, and post indexing functionality.
+
+## Getting Started
+
+### Starting the Web API
+
+**Option 1: Start with default directory (`stackexchange-data`)**
+```bash
+./Haystack.exe
+```
+
+**Option 2: Start with a specific data directory**
+```bash
+./Haystack.exe "path/to/data/directory"
+```
+
+The API will attempt to load the following files from the specified directory:
+- `lexicon.txt` - Indexed vocabulary
+- `vocab.txt` - Autocomplete vocabulary
+- `data_index/` - ISAM storage files
+- `barrel_*.dat` - Inverted index barrels
+
+**Example:**
+```bash
+# Start API using data from the stackexchange-data directory
+./Haystack.exe stackexchange-data
+```
 
 ## Base URL
 ```
@@ -252,7 +278,7 @@ curl -X POST http://localhost:5000/api/search/add-posts \
 - **Logging:** Console logs with timestamps indicate when flushes start and complete
 - **Error Handling:** Failed flushes are logged but don't interrupt the application; the task continues running
 
----
+## Configuration
 
 The API requires the following configuration in `appsettings.json`:
 
@@ -266,6 +292,20 @@ The API requires the following configuration in `appsettings.json`:
 **Parameters:**
 - `DataDirectory`: Path to the directory containing indexed data files (lexicon.txt, vocab.txt, data_index, etc.)
 - `NumBarrels`: Number of index barrels used during indexing
+
+### CORS Configuration
+
+The API is configured to accept requests from the following origins:
+- `http://localhost:4200` - Local frontend development server
+- `http://20.255.48.227` - Remote frontend server
+
+All HTTP methods and headers are allowed from these origins. To modify the allowed origins, update the CORS policy in `Program.cs`:
+
+```csharp
+corsBuilder.WithOrigins("http://localhost:4200", "http://20.255.48.227")
+           .AllowAnyMethod()
+           .AllowAnyHeader();
+```
 
 ---
 

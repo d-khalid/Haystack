@@ -42,26 +42,48 @@ public class SearchController : ControllerBase
         {
             // Get post IDs from the query engine
             var postIds = _queryEngine.Search(query, limit);
+            Console.WriteLine($"[API] Query '{query}': Found {postIds.Count} post IDs");
 
             // Retrieve full post objects from the data index
             var posts = new List<Post>();
+            int failedCount = 0;
+            int nullCount = 0;
+
             foreach (var postId in postIds)
             {
-                var postData = _dataIndex.Get(postId);
+                // Construct the compound key used to store this post
+                CompoundKey ck = new CompoundKey(
+                    (byte)KeyType.PostById,
+                    (ushort)SiteID.AskUbuntu,
+                    postId
+                );
+                
+                Console.WriteLine($"[API] Looking up post {postId} with compound key: {ck.Pack()}");
+                var postData = _dataIndex.Get((long)ck.Pack());
+                
                 if (postData != null)
                 {
                     try
                     {
                         var post = Post.Deserialize(postData);
                         posts.Add(post);
+                        Console.WriteLine($"[API] Successfully retrieved post {postId}");
                     }
                     catch (Exception ex)
                     {
                         // Log and continue if a single post fails to deserialize
-                        Console.WriteLine($"Failed to deserialize post {postId}: {ex.Message}");
+                        Console.WriteLine($"[API] Failed to deserialize post {postId}: {ex.Message}");
+                        failedCount++;
                     }
                 }
+                else
+                {
+                    Console.WriteLine($"[API] Post {postId} data is null from storage");
+                    nullCount++;
+                }
             }
+
+            Console.WriteLine($"[API] Query '{query}': Retrieved {posts.Count} posts, {failedCount} deserialization failures, {nullCount} null results");
 
             return Ok(new SearchQueryResponse
             {
@@ -72,6 +94,7 @@ public class SearchController : ControllerBase
         }
         catch (Exception ex)
         {
+            Console.WriteLine($"[API] Error during query '{query}': {ex}");
             return StatusCode(500, new { error = "An error occurred while processing the search", details = ex.Message });
         }
     }

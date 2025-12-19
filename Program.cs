@@ -12,13 +12,19 @@ public class Program
 {
     public static async Task<int> Main(string[] args)
     {
-        // 1. If no args, run Web API mode
+        // 1. If single argument that is a valid directory, run Web API mode with that directory
+        if (args.Length == 1 && Directory.Exists(args[0]))
+        {
+            return RunWebApi(new[] { args[0] });
+        }
+
+        // 2. If no args, run Web API mode with default directory
         if (args.Length == 0)
         {
             return RunWebApi(args);
         }
 
-        // 2. Otherwise, run CLI mode
+        // 3. Otherwise, run CLI mode
         return await RunCli(args);
     }
 
@@ -26,11 +32,54 @@ public class Program
     {
         var builder = WebApplication.CreateBuilder(args);
         builder.Services.AddControllers();
+
+        // Configure CORS to allow frontend access
+        builder.Services.AddCors(options =>
+        {
+            options.AddPolicy("AllowFrontend", corsBuilder =>
+            {
+                corsBuilder.WithOrigins("http://localhost:4200", "http://20.255.48.227")
+                           .AllowAnyMethod()
+                           .AllowAnyHeader();
+            });
+        });
         
-        // Get the data directory from configuration or use default
-        var configuration = builder.Configuration;
-        string dataDir = configuration.GetSection("DataDirectory").Value ?? "stackexchange-data";
-        int numBarrels = int.Parse(configuration.GetSection("NumBarrels").Value ?? "4");
+        // Determine data directory: use command line argument if provided, otherwise use config or default
+        string dataDir;
+        if (args.Length > 0 && Directory.Exists(args[0]))
+        {
+            dataDir = Path.GetFullPath(args[0]);
+            Console.WriteLine($"[API] Using data directory from command line argument: {dataDir}");
+        }
+        else
+        {
+            var configuration = builder.Configuration;
+            string configDir = configuration.GetSection("DataDirectory").Value ?? "stackexchange-data";
+            dataDir = Path.GetFullPath(configDir);
+            Console.WriteLine($"[API] Using data directory from configuration: {dataDir}");
+        }
+
+        // Verify directory exists
+        if (!Directory.Exists(dataDir))
+        {
+            Console.WriteLine($"[API] ERROR: Data directory does not exist: {dataDir}");
+            Console.WriteLine($"[API] Current working directory: {Directory.GetCurrentDirectory()}");
+            return 1;
+        }
+
+        Console.WriteLine($"[API] Data directory verified: {dataDir}");
+        Console.WriteLine($"[API] Files in directory: {string.Join(", ", Directory.GetFiles(dataDir))}");
+
+        int numBarrels = 4; // Default to 4 barrels
+        try
+        {
+            var configuration = builder.Configuration;
+            numBarrels = int.Parse(configuration.GetSection("NumBarrels").Value ?? "4");
+        }
+        catch
+        {
+            Console.WriteLine("[API] Could not parse NumBarrels from configuration, using default of 4");
+        }
 
         // Register components for the API to use
         builder.Services.AddSingleton<Lexicon>(sp =>
@@ -39,7 +88,13 @@ public class Program
             var lexiconPath = Path.Combine(dataDir, "lexicon.txt");
             if (File.Exists(lexiconPath))
             {
+                Console.WriteLine($"[API] Loading lexicon from: {lexiconPath}");
                 lexicon.Load(lexiconPath);
+                Console.WriteLine($"[API] Lexicon loaded successfully with {lexicon.Count} words");
+            }
+            else
+            {
+                Console.WriteLine($"[API] ERROR: Lexicon file not found at: {lexiconPath}");
             }
             return lexicon;
         });
@@ -50,25 +105,37 @@ public class Program
             var vocabPath = Path.Combine(dataDir, "vocab.txt");
             if (File.Exists(vocabPath))
             {
+                Console.WriteLine($"[API] Loading vocabulary from: {vocabPath}");
                 autocompleteService.LoadFromFile(vocabPath);
+                Console.WriteLine($"[API] Vocabulary loaded successfully");
+            }
+            else
+            {
+                Console.WriteLine($"[API] ERROR: Vocabulary file not found at: {vocabPath}");
             }
             return autocompleteService;
         });
 
         builder.Services.AddSingleton<ISAMStorage>(sp =>
         {
-            return new ISAMStorage(Path.Combine(dataDir, "data_index"));
+            var dataIndexPath = Path.Join(dataDir, "data_index");
+            Console.WriteLine($"[API] Initializing ISAM storage with base path: {dataIndexPath}");
+            return new ISAMStorage(dataIndexPath);
         });
 
         builder.Services.AddSingleton<QueryEngine>(sp =>
         {
             var lexicon = sp.GetRequiredService<Lexicon>();
             var dataIndex = sp.GetRequiredService<ISAMStorage>();
+            Console.WriteLine($"[API] Initializing QueryEngine with {numBarrels} barrels and directory: {dataDir}");
             return new QueryEngine(dataDir, lexicon, numBarrels, dataIndex);
         });
 
         var app = builder.Build();
         app.MapControllers();
+
+        // Enable CORS
+        app.UseCors("AllowFrontend");
 
         // Start background task to flush delta index every 2 hours
         var queryEngine = app.Services.GetRequiredService<QueryEngine>();

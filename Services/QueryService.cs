@@ -66,19 +66,29 @@ public class QueryEngine
         if (_cache.TryGetValue(normalizedQuery, out var cachedResults))
         {
             RefreshCachePosition(normalizedQuery);
+            Console.WriteLine($"[QueryEngine] Cache hit for '{normalizedQuery}': {cachedResults.Count} results");
             return cachedResults.Take(limit).ToList();
         }
 
         var tokens = normalizedQuery.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var docScores = new Dictionary<uint, double>();
+        
+        Console.WriteLine($"[QueryEngine] Searching for '{normalizedQuery}' with {tokens.Length} tokens");
 
         foreach (var token in tokens)
         {
             uint wordId = _lexicon.GetWordId(token);
-            if (wordId == 0) continue;
+            Console.WriteLine($"[QueryEngine] Token '{token}' -> WordId {wordId}");
+            
+            if (wordId == 0) 
+            {
+                Console.WriteLine($"[QueryEngine] WordId 0 (not found) for token '{token}'");
+                continue;
+            }
 
             // 2. SEARCH MERGE: Check Disk Barrels AND Memory Buffer
             var diskPostings = InvertedIndex.SearchWithScores(_indexDir, _numBarrels, wordId);
+            Console.WriteLine($"[QueryEngine] Found {diskPostings.Count} disk postings for wordId {wordId}");
             
             // Add disk results
             foreach (var p in diskPostings)
@@ -90,6 +100,7 @@ public class QueryEngine
             // Add memory buffer results
             if (_deltaIndex.TryGetValue(wordId, out var livePostings))
             {
+                Console.WriteLine($"[QueryEngine] Found {livePostings.Count} memory postings for wordId {wordId}");
                 foreach (var p in livePostings)
                 {
                     if (!docScores.ContainsKey(p.DocId)) docScores[p.DocId] = 0;
@@ -97,14 +108,23 @@ public class QueryEngine
                 }
             }
         }
-
+        
+        Console.WriteLine($"[QueryEngine] Total unique documents found: {docScores.Count}");
+        
         if (docScores.Count == 0) return new List<uint>();
 
         var finalResults = docScores
             .OrderByDescending(kvp => kvp.Value)
             .Take(200) 
             .Select(hit => {
-                var entry = _dataIndex.Get(hit.Key); // Assuming 'Read' or 'Get' based on previous context
+                // Construct the compound key used to store this post
+                CompoundKey ck = new CompoundKey(
+                    (byte)KeyType.PostById,
+                    (ushort)SiteID.AskUbuntu,
+                    hit.Key
+                );
+                
+                var entry = _dataIndex.Get((long)ck.Pack());
                 if (entry is null) return new { hit.Key, FinalScore = hit.Value };
 
                 var post = Post.Deserialize(entry);
