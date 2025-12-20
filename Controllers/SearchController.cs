@@ -10,6 +10,7 @@ public class SearchController : ControllerBase
     private readonly QueryEngine _queryEngine;
     private readonly AutocompleteService _autocompleteService;
     private readonly ISAMStorage _dataIndex;
+    
 
     public SearchController(QueryEngine queryEngine, AutocompleteService autocompleteService, ISAMStorage dataIndex)
     {
@@ -57,10 +58,10 @@ public class SearchController : ControllerBase
                     (ushort)SiteID.AskUbuntu,
                     postId
                 );
-                
+
                 Console.WriteLine($"[API] Looking up post {postId} with compound key: {ck.Pack()}");
                 var postData = _dataIndex.Get((long)ck.Pack());
-                
+
                 if (postData != null)
                 {
                     try
@@ -83,7 +84,8 @@ public class SearchController : ControllerBase
                 }
             }
 
-            Console.WriteLine($"[API] Query '{query}': Retrieved {posts.Count} posts, {failedCount} deserialization failures, {nullCount} null results");
+            Console.WriteLine(
+                $"[API] Query '{query}': Retrieved {posts.Count} posts, {failedCount} deserialization failures, {nullCount} null results");
 
             return Ok(new SearchQueryResponse
             {
@@ -95,7 +97,8 @@ public class SearchController : ControllerBase
         catch (Exception ex)
         {
             Console.WriteLine($"[API] Error during query '{query}': {ex}");
-            return StatusCode(500, new { error = "An error occurred while processing the search", details = ex.Message });
+            return StatusCode(500,
+                new { error = "An error occurred while processing the search", details = ex.Message });
         }
     }
 
@@ -121,10 +124,10 @@ public class SearchController : ControllerBase
                 (ushort)SiteID.AskUbuntu,
                 postId
             );
-            
+
             Console.WriteLine($"[API] Getting post {postId} with compound key: {ck.Pack()}");
             var postData = _dataIndex.Get((long)ck.Pack());
-            
+
             if (postData == null)
             {
                 Console.WriteLine($"[API] Post {postId} not found in storage");
@@ -183,70 +186,60 @@ public class SearchController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { error = "An error occurred while processing autocomplete", details = ex.Message });
+            return StatusCode(500,
+                new { error = "An error occurred while processing autocomplete", details = ex.Message });
         }
     }
 
-    /// <summary>
-    /// Adds new posts to the runtime memory buffer (delta index).
-    /// Posts are indexed immediately but are not persisted to disk until FlushDeltaToDisk is called.
-    /// </summary>
-    /// <param name="addPostsRequest">Request containing a list of post objects to add</param>
-    /// <returns>Response indicating success and number of posts added</returns>
     [HttpPost("add-posts")]
     public ActionResult<AddPostsResponse> AddPosts([FromBody] AddPostsRequest addPostsRequest)
     {
-        if (addPostsRequest?.Posts == null || addPostsRequest.Posts.Count == 0)
+        // 1. Log Request Entry
+        int requestedCount = addPostsRequest?.Posts?.Count ?? 0;
+        Console.WriteLine($"\n[{(DateTime.Now):HH:mm:ss}] API RECEIVED: AddPosts request with {requestedCount} items.");
+
+        if (addPostsRequest?.Posts == null || requestedCount == 0)
         {
-            return BadRequest(new { error = "Posts list is required and cannot be empty" });
+            Console.WriteLine(" --> [REJECTED] Request body was null or empty.");
+            return BadRequest(new { error = "Posts list is required and cannot be empty." });
         }
 
-        if (addPostsRequest.Posts.Count > 1000)
+        if (requestedCount > 1000)
         {
-            return BadRequest(new { error = "Cannot add more than 1000 posts in a single request" });
+            Console.WriteLine($" --> [REJECTED] Batch size {requestedCount} exceeds 1000 limit.");
+            return BadRequest(new { error = "Batch size exceeds limit of 1000 posts." });
         }
+
+        var failedPosts = new List<FailedPost>();
+        int successCount = 0;
 
         try
         {
-            int successCount = 0;
-            var failedPosts = new List<FailedPost>();
-
             foreach (var post in addPostsRequest.Posts)
             {
+                if (post.PostId <= 0)
+                {
+                    Console.WriteLine($" --> [WARN] Skipping post with invalid ID: {post.PostId}");
+                    failedPosts.Add(new FailedPost { Error = "PostId must be > 0", PostData = post });
+                    continue;
+                }
+
                 try
                 {
-                    // Validate essential post fields
-                    if (post.PostId == 0)
-                    {
-                        failedPosts.Add(new FailedPost
-                        {
-                            PostData = post,
-                            Error = "PostId is required and cannot be zero"
-                        });
-                        continue;
-                    }
-
-                    if (string.IsNullOrWhiteSpace(post.Title) && string.IsNullOrWhiteSpace(post.CleanedBody))
-                    {
-                        failedPosts.Add(new FailedPost
-                        {
-                            PostData = post,
-                            Error = "At least one of Title or CleanedBody must be non-empty"
-                        });
-                        continue;
-                    }
-
-                    // Add the post to the query engine's runtime buffer
+                    // Call the QueryEngine to index the post
                     _queryEngine.AddPost(post);
                     successCount++;
+                    
+                    // Optional: Log every 100th post for large batches to avoid console spam
+                    if (successCount % 100 == 0)
+                    {
+                        Console.WriteLine($" --> [PROGRESS] Indexed {successCount}/{requestedCount}...");
+                    }
                 }
                 catch (Exception ex)
                 {
-                    failedPosts.Add(new FailedPost
-                    {
-                        PostData = post,
-                        Error = $"Failed to add post: {ex.Message}"
-                    });
+                    Console.WriteLine($" --> [ERROR] Failed to index PostId {post.PostId}: {ex.Message}");
+                    failedPosts.Add(new FailedPost { Error = ex.Message, PostData = post });
                 }
             }
 
@@ -254,16 +247,18 @@ public class SearchController : ControllerBase
             {
                 SuccessCount = successCount,
                 FailureCount = failedPosts.Count,
-                TotalRequested = addPostsRequest.Posts.Count,
+                TotalRequested = requestedCount,
                 FailedPosts = failedPosts,
-                Message = $"Successfully added {successCount} out of {addPostsRequest.Posts.Count} posts to the runtime index"
+                Message = $"Processed {requestedCount} posts."
             });
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { error = "An error occurred while adding posts", details = ex.Message });
+            Console.WriteLine($"!!! [CRITICAL FAILURE] !!! {ex.Message}");
+            return StatusCode(500, new { error = "Critical error.", details = ex.Message });
         }
     }
+
 }
 
 /// <summary>

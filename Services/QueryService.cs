@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent; // Required for thread-safety
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 
 public class QueryEngine
 {
@@ -11,11 +13,13 @@ public class QueryEngine
     private readonly int _numBarrels;
     private readonly ISAMStorage _dataIndex;
 
-    // 1. Memory Buffer for runtime updates (WordID -> List of Postings)
-    private readonly Dictionary<uint, List<InvertedIndex.Posting>> _deltaIndex = new();
-    
-    private readonly Dictionary<string, List<uint>> _cache = new();
+    // 1. Thread-safe Memory Buffer (Delta Index)
+    private readonly ConcurrentDictionary<uint, List<InvertedIndex.Posting>> _deltaIndex = new();
+
+    // 2. Thread-safe Cache structures
+    private readonly ConcurrentDictionary<string, List<uint>> _cache = new();
     private readonly LinkedList<string> _lruNodes = new();
+    private readonly ReaderWriterLockSlim _cacheLock = new(); // Protects the LinkedList
     private const int MaxCacheEntries = 1000;
 
     public QueryEngine(string indexDir, Lexicon lexicon, int numBarrels, ISAMStorage dataIndex)
@@ -26,36 +30,65 @@ public class QueryEngine
         _dataIndex = dataIndex;
     }
 
-    /// <summary>
-    /// Adds a post to the index at runtime via the memory buffer.
-    /// </summary>
     public void AddPost(Post post)
     {
-        // Add to main ISAM data storage
-        _dataIndex.Insert((uint)post.PostId, post.Serialize());
+        if (post == null || post.PostId <= 0) return;
 
-        // Tokenize and add to Delta Index
+        CompoundKey ck = new CompoundKey((byte)KeyType.PostById, (ushort)SiteID.AskUbuntu, (uint)post.PostId);
+        long packedKey = (long)ck.Pack();
+
+        // Store the post using the PACKED key, not the raw PostId
+        _dataIndex.Insert(packedKey, post.Serialize());
+
+        // 2. Tokenize (Ensure your tokenizer lowercases and trims!)
         var titleTokens = _lexicon.Tokenize(post.Title ?? "");
         var bodyTokens = _lexicon.Tokenize(post.CleanedBody ?? "");
 
-        void BufferToken(string token, int score) {
-            uint wordId = _lexicon.AddWord(token);
-            if (!_deltaIndex.ContainsKey(wordId)) _deltaIndex[wordId] = new();
-            
-            // Check if post already exists for this word to aggregate score
-            var existing = _deltaIndex[wordId].FirstOrDefault(p => p.DocId == (uint)post.PostId);
-            if (existing.DocId != 0) {
-                _deltaIndex[wordId].Remove(existing);
-                _deltaIndex[wordId].Add(new InvertedIndex.Posting { DocId = (uint)post.PostId, Score = existing.Score + score });
-            } else {
-                _deltaIndex[wordId].Add(new InvertedIndex.Posting { DocId = (uint)post.PostId, Score = score });
+        // Use a local dictionary to aggregate scores for THIS post before hitting the global Delta Index
+        // This is much faster and more thread-safe than locking the global list repeatedly
+        var localDocScores = new Dictionary<uint, int>();
+
+        void ProcessTokenList(IEnumerable<string> tokens, int weight)
+        {
+            foreach (var token in tokens)
+            {
+                if (string.IsNullOrWhiteSpace(token)) continue;
+
+                // AddWord MUST be thread-safe internally!
+                uint wordId = _lexicon.AddWord(token);
+                if (wordId == 0) continue;
+
+                if (!localDocScores.ContainsKey(wordId)) localDocScores[wordId] = 0;
+                localDocScores[wordId] += weight;
             }
         }
 
-        foreach (var t in titleTokens) BufferToken(t, 10);
-        foreach (var t in bodyTokens) BufferToken(t, 1);
+        ProcessTokenList(titleTokens, 10);
+        ProcessTokenList(bodyTokens, 1);
 
+        // 3. Move the local scores into the global Thread-Safe Delta Index
+        foreach (var kvp in localDocScores)
+        {
+            uint wordId = kvp.Key;
+            int score = kvp.Value;
+
+            // Get or create the posting list for this word
+            var postings = _deltaIndex.GetOrAdd(wordId, _ => new List<InvertedIndex.Posting>());
+
+            lock (postings)
+            {
+                // Remove existing entry for this DocId if it exists (relevant for updates)
+                postings.RemoveAll(p => p.DocId == (uint)post.PostId);
+                postings.Add(new InvertedIndex.Posting { DocId = (uint)post.PostId, Score = score });
+            }
+        }
+
+        // 4. CRITICAL: Clear cache so the new post appears in search results immediately
         InvalidateCache();
+
+        // Console log for your verification (as requested previously)
+        Console.WriteLine(
+            $" --> [ENGINE] Post {post.PostId} indexed. {localDocScores.Count} unique words added to Delta.");
     }
 
     public List<uint> Search(string queryText, int limit = 20)
@@ -63,73 +96,75 @@ public class QueryEngine
         string normalizedQuery = queryText.Trim().ToLower();
         if (string.IsNullOrWhiteSpace(normalizedQuery)) return new List<uint>();
 
+        // 1. Cache Check (unchanged)
         if (_cache.TryGetValue(normalizedQuery, out var cachedResults))
         {
             RefreshCachePosition(normalizedQuery);
-            Console.WriteLine($"[QueryEngine] Cache hit for '{normalizedQuery}': {cachedResults.Count} results");
             return cachedResults.Take(limit).ToList();
         }
 
         var tokens = normalizedQuery.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var docScores = new Dictionary<uint, double>();
-        
-        Console.WriteLine($"[QueryEngine] Searching for '{normalizedQuery}' with {tokens.Length} tokens");
+        // ConcurrentDictionary to allow parallel threads to aggregate scores safely
+        var docScores = new ConcurrentDictionary<uint, double>();
 
-        foreach (var token in tokens)
+        // 2. Parallel Barrel Search
+        // This allows the CPU to request data from multiple disk barrels at once
+        Parallel.ForEach(tokens, token =>
         {
             uint wordId = _lexicon.GetWordId(token);
-            Console.WriteLine($"[QueryEngine] Token '{token}' -> WordId {wordId}");
-            
-            if (wordId == 0) 
-            {
-                Console.WriteLine($"[QueryEngine] WordId 0 (not found) for token '{token}'");
-                continue;
-            }
+            if (wordId == 0) return;
 
-            // 2. SEARCH MERGE: Check Disk Barrels AND Memory Buffer
+            // A. Search Disk (Merged Fragments)
             var diskPostings = InvertedIndex.SearchWithScores(_indexDir, _numBarrels, wordId);
-            Console.WriteLine($"[QueryEngine] Found {diskPostings.Count} disk postings for wordId {wordId}");
-            
-            // Add disk results
-            foreach (var p in diskPostings)
+
+            // B. Search Memory
+            List<InvertedIndex.Posting> livePostings = null;
+            if (_deltaIndex.TryGetValue(wordId, out var sharedList))
             {
-                if (!docScores.ContainsKey(p.DocId)) docScores[p.DocId] = 0;
-                docScores[p.DocId] += p.Score;
+                lock (sharedList) livePostings = sharedList.ToList();
             }
 
-            // Add memory buffer results
-            if (_deltaIndex.TryGetValue(wordId, out var livePostings))
+            // C. Scoring Logic with "Exact Match" / "Rarity" Boost
+            // Rare words (short posting lists) get higher weights than common words ("the")
+            double idf = Math.Log10(1000000.0 / (diskPostings.Count + (livePostings?.Count ?? 0) + 1));
+
+            void ProcessPosting(InvertedIndex.Posting p)
             {
-                Console.WriteLine($"[QueryEngine] Found {livePostings.Count} memory postings for wordId {wordId}");
+                // Apply IDF boost to the score
+                docScores.AddOrUpdate(p.DocId, p.Score * idf, (id, old) => old + (p.Score * idf));
+            }
+
+            foreach (var p in diskPostings) ProcessPosting(p);
+            if (livePostings != null)
                 foreach (var p in livePostings)
-                {
-                    if (!docScores.ContainsKey(p.DocId)) docScores[p.DocId] = 0;
-                    docScores[p.DocId] += p.Score;
-                }
-            }
-        }
-        
-        Console.WriteLine($"[QueryEngine] Total unique documents found: {docScores.Count}");
-        
-        if (docScores.Count == 0) return new List<uint>();
+                    ProcessPosting(p);
+        });
 
+        if (docScores.IsEmpty) return new List<uint>();
+
+        // 3. Final Ranking with Exact Title Match Boost
         var finalResults = docScores
             .OrderByDescending(kvp => kvp.Value)
-            .Take(200) 
-            .Select(hit => {
-                // Construct the compound key used to store this post
-                CompoundKey ck = new CompoundKey(
-                    (byte)KeyType.PostById,
-                    (ushort)SiteID.AskUbuntu,
-                    hit.Key
-                );
-                
+            .Take(100) // Take top candidates for heavy re-ranking
+            .Select(hit =>
+            {
+                CompoundKey ck = new CompoundKey((byte)KeyType.PostById, (ushort)SiteID.AskUbuntu, hit.Key);
                 var entry = _dataIndex.Get((long)ck.Pack());
                 if (entry is null) return new { hit.Key, FinalScore = hit.Value };
 
                 var post = Post.Deserialize(entry);
-                double popularityBoost = Math.Log10(post.Score + 1) * 5.0;
-                return new { hit.Key, FinalScore = hit.Value + popularityBoost };
+                double score = hit.Value;
+
+                // HUGE BOOST for exact title match
+                if (post.Title != null && post.Title.Equals(queryText, StringComparison.OrdinalIgnoreCase))
+                    score += 1000;
+
+                // Substantial boost if all query words appear in the title
+                if (tokens.All(t => post.Title?.ToLower().Contains(t) == true))
+                    score += 500;
+
+                double popularityBoost = Math.Log10(post.Score + 1) * 2.0;
+                return new { hit.Key, FinalScore = score + popularityBoost };
             })
             .OrderByDescending(r => r.FinalScore)
             .Select(r => r.Key)
@@ -139,80 +174,77 @@ public class QueryEngine
         return finalResults.Take(limit).ToList();
     }
 
-    /// <summary>
-    /// Flushes the memory buffer into the physical disk barrels.
-    /// This is an expensive operation and should be run on a background thread.
-    /// </summary>
-    public void FlushDeltaToDisk()
+    private void SaveToCache(string query, List<uint> results)
     {
-        if (_deltaIndex.Count == 0) return;
-
-        // Group delta items by their destination barrel
-        var barrelUpdates = _deltaIndex.GroupBy(kvp => kvp.Key % (uint)_numBarrels);
-
-        foreach (var group in barrelUpdates)
+        _cacheLock.EnterWriteLock();
+        try
         {
-            uint barrelId = group.Key;
-            string path = Path.Combine(_indexDir, $"barrel_{barrelId}.dat");
-            
-            // Read existing barrel data
-            var barrelData = new Dictionary<uint, List<InvertedIndex.Posting>>();
-            if (File.Exists(path))
+            if (_cache.Count >= MaxCacheEntries)
             {
-                foreach (var line in File.ReadAllLines(path))
+                if (_lruNodes.Last != null)
                 {
-                    var parts = line.Split('|');
-                    if (parts.Length != 2) continue;
-                    uint wId = uint.Parse(parts[0]);
-                    var postings = parts[1].Split(',').Select(s => {
-                        var p = s.Split(':');
-                        return new InvertedIndex.Posting { DocId = uint.Parse(p[0]), Score = int.Parse(p[1]) };
-                    }).ToList();
-                    barrelData[wId] = postings;
+                    var oldest = _lruNodes.Last.Value;
+                    _cache.TryRemove(oldest, out _);
+                    _lruNodes.RemoveLast();
                 }
             }
 
-            // Merge Delta into Barrel Data
-            foreach (var update in group)
-            {
-                if (!barrelData.ContainsKey(update.Key)) barrelData[update.Key] = new();
-                barrelData[update.Key].AddRange(update.Value);
-            }
-
-            // Write back to disk (In-place rewrite for current format)
-            using var sw = new StreamWriter(path, false, Encoding.UTF8);
-            foreach (var kvp in barrelData.OrderBy(k => k.Key))
-            {
-                var sorted = kvp.Value.OrderByDescending(p => p.Score);
-                sw.WriteLine($"{kvp.Key}|{string.Join(",", sorted.Select(p => $"{p.DocId}:{p.Score}"))}");
-            }
+            _cache[query] = results;
+            _lruNodes.AddFirst(query);
         }
-
-        _deltaIndex.Clear();
-        InvalidateCache();
-    }
-
-    private void SaveToCache(string query, List<uint> results)
-    {
-        if (_cache.Count >= MaxCacheEntries)
+        finally
         {
-            var oldest = _lruNodes.Last.Value;
-            _cache.Remove(oldest);
-            _lruNodes.RemoveLast();
+            _cacheLock.ExitWriteLock();
         }
-        _cache[query] = results;
-        _lruNodes.AddFirst(query);
     }
 
     private void RefreshCachePosition(string query)
     {
-        _lruNodes.Remove(query);
-        _lruNodes.AddFirst(query);
+        _cacheLock.EnterWriteLock();
+        try
+        {
+            if (_lruNodes.Contains(query))
+            {
+                _lruNodes.Remove(query);
+                _lruNodes.AddFirst(query);
+            }
+        }
+        finally
+        {
+            _cacheLock.ExitWriteLock();
+        }
     }
 
     public void InvalidateCache()
     {
-        _cache.Clear();
-        _lruNodes.Clear();
+        _cacheLock.EnterWriteLock();
+        try
+        {
+            _cache.Clear();
+            _lruNodes.Clear();
+        }
+        finally
+        {
+            _cacheLock.ExitWriteLock();
+        }
+    }
+
+    public void FlushDeltaToDisk()
+    {
+        foreach (var group in _deltaIndex.GroupBy(kvp => kvp.Key % (uint)_numBarrels))
+        {
+            uint barrelId = group.Key;
+            string path = Path.Combine(_indexDir, $"barrel_{barrelId}.dat");
+
+            // Open with Append: true
+            using var sw = new StreamWriter(path, append: true, Encoding.UTF8);
+            foreach (var kvp in group)
+            {
+                // Just dump the new postings at the end of the file
+                sw.WriteLine($"{kvp.Key}|{string.Join(",", kvp.Value.Select(p => $"{p.DocId}:{p.Score}"))}");
+            }
+        }
+
+        _deltaIndex.Clear();
     }
 }

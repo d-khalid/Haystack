@@ -5,22 +5,27 @@ using System.Linq;
 
 public class Lexicon
 {
-    private readonly Dictionary<string, uint> _wordToId = new();
-    private readonly List<string> _idToWord = new();
+    private readonly Dictionary<string, uint> _wordToId;
+    private readonly List<string> _idToWord;
     private uint _nextId = 1;
 
-    public Lexicon()
+    // Added capacity parameter to prevent frequent resizing
+    public Lexicon(int initialCapacity = 0)
     {
+        _wordToId = new Dictionary<string, uint>(initialCapacity);
+        _idToWord = new List<string>(initialCapacity);
+        
         // Reserve ID 0 for "Not Found" / Null
         _idToWord.Add(string.Empty);
     }
     
     public int Count => _wordToId.Count;
     
-    // Generate lexicon and trie for autocomplete side by side
     public static (Lexicon lexicon, AutocompleteService trie) Generate(ISAMStorage dataIndex)
     {
-        Lexicon lexicon = new Lexicon();
+        // Pre-sizing to a reasonable estimate (e.g., 500k) to reduce "ghost" array allocations
+        const int InitialEstimate = 500_000;
+        Lexicon lexicon = new Lexicon(InitialEstimate);
         AutocompleteService autocomplete = new AutocompleteService();
         int count = 0;
 
@@ -35,22 +40,25 @@ public class Lexicon
             {
                 Post post = Post.Deserialize(entry.Value.Data);
 
-                // Helper to process text for both Lexicon (ID assignment) and Trie (Autocomplete)
                 void ProcessText(string text)
                 {
                     if (string.IsNullOrEmpty(text)) return;
                     foreach (var token in lexicon.Tokenize(text))
                     {
-                        lexicon.AddWord(token);       // Assign/Get ID
-                        autocomplete.AddWord(token);  // Add to Trie & increment weight
+                        // 1. Add/Get ID
+                        uint id = lexicon.AddWord(token);
+                        
+                        // 2. Optimization: Retrieve the internal reference from the lexicon.
+                        // This ensures the Trie points to the long-lived string in the List,
+                        // allowing the temporary 'token' string to be garbage collected.
+                        string internalRef = lexicon.GetWord(id);
+                        autocomplete.AddWord(internalRef);
                     }
                 }
 
-                // Process content fields
                 if (post.PostTypeId == 1) ProcessText(post.Title);
                 ProcessText(post.CleanedBody);
 
-                // Process Tags
                 if (post.Tags != null)
                 {
                     foreach (var tag in post.Tags)
@@ -58,8 +66,9 @@ public class Lexicon
                         string norm = lexicon.NormalizeToken(tag);
                         if (!string.IsNullOrEmpty(norm))
                         {
-                            lexicon.AddWord(norm);
-                            autocomplete.AddWord(norm, 5); // Give tags higher weight/priority
+                            uint id = lexicon.AddWord(norm);
+                            string internalRef = lexicon.GetWord(id);
+                            autocomplete.AddWord(internalRef, 5); 
                         }
                     }
                 }
@@ -97,7 +106,6 @@ public class Lexicon
         return _wordToId.TryGetValue(word, out uint id) ? id : 0;
     }
 
-    // File Format: newline-delimited word
     public void Save(string filePath)
     {
         File.WriteAllLines(filePath, _idToWord.Skip(1));
@@ -116,15 +124,12 @@ public class Lexicon
     public string NormalizeToken(string token)
     {
         if (string.IsNullOrWhiteSpace(token)) return string.Empty;
-        
-        // Remove irrelevant symbols
         char[] trimChars = ".,().\"'?:;[]&^%$ \n\r\t".ToCharArray();
         return token.Trim(trimChars).ToLowerInvariant();
     }
 
     public List<string> Tokenize(string text)
     {
-        // Simple whitespace split initially
         var rawTokens = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var result = new List<string>();
 

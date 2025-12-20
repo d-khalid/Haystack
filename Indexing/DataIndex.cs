@@ -6,7 +6,6 @@ using System.Web;
 
 public static class DataIndex
 {
-    private const int PostLimit = 100000; // Soft limit for indexing
 
     public static void Generate(ISAMStorage dataIndex, string xmlPath, SiteID siteId)
     {
@@ -40,12 +39,7 @@ public static class DataIndex
                         Console.Write($"\rImported {count} posts into DataIndex...");
                     }
 
-                    // Stop at soft limit
-                    if (count >= PostLimit)
-                    {
-                        Console.WriteLine($"\nReached soft limit of {PostLimit} posts. Stopping import.");
-                        break;
-                    }
+                   
                 }
             }
         }
